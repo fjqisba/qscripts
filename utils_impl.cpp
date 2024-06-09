@@ -1,27 +1,12 @@
-//-------------------------------------------------------------------------
-struct collect_extlangs: extlang_visitor_t
-{
-    extlangs_t *langs;
-
-    virtual ssize_t idaapi visit_extlang(extlang_t *extlang) override
-    {
-        langs->push_back(extlang);
-        return 0;
-    }
-
-    collect_extlangs(extlangs_t *langs, bool select)
-    {
-        langs->qclear();
-        this->langs = langs;
-        for_all_extlangs(*this, select);
-    }
-};
+#include "utils_impl.h"
+#include <filesystem>
+#include <regex>
 
 //-------------------------------------------------------------------------
 // Utility function to return a file's last modification timestamp
 bool get_file_modification_time(
     const char *filename,
-    qtime64_t *mtime = nullptr)
+    qtime64_t *mtime)
 {
     qstatbuf stat_buf;
     if (qstat(filename, &stat_buf) != 0)
@@ -34,7 +19,7 @@ bool get_file_modification_time(
 
 bool get_file_modification_time(
     const qstring &filename,
-    qtime64_t *mtime = nullptr)
+    qtime64_t *mtime)
 {
     return get_file_modification_time(filename.c_str(), mtime);
 }
@@ -50,7 +35,7 @@ void normalize_path_sep(qstring &path)
 }
 
 //-------------------------------------------------------------------------
-void make_abs_path(qstring& path, const char* base_dir = nullptr, bool normalize = false)
+void make_abs_path(qstring& path, const char* base_dir, bool normalize)
 {
     if (qisabspath(path.c_str()))
         return;

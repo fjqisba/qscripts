@@ -11,8 +11,7 @@ scripts in your favorite editor and execute them directly in IDA.
 #include <regex>
 #include <filesystem>
 #include "ida.h"
-
-#include "utils_impl.cpp"
+#include "utils_impl.h"
 #include "script.hpp"
 
 //-------------------------------------------------------------------------
@@ -256,54 +255,63 @@ private:
     // pkgmodname                 Expands the file name using the pkgbase into the form: 'module.submodule1.submodule2'
     // pkgparentmodname           Expands the file name using the pkgbase into the form up to the parent module: 'module.submodule1'
     // ext                        Add-on suffix including bitness and extension (example: 64.dll, .so, 64.so, .dylib, etc.)
-    void expand_string(
-        qstring &input, 
-        qstring &output, 
-        const expand_ctx_t& ctx)
-    {
-        output = std::regex_replace(
-            input.c_str(),
-            RE_EXPANDER,
-            [this, ctx](auto &m) -> std::string
-            {
-                qstring match1 = m.str(1).c_str();
+	void expand_string(
+		qstring& input,
+		qstring& output,
+		const expand_ctx_t& ctx)
+	{
+		std::string strInput;
+		strInput.assign(input.c_str(), input.length());
+		auto begin = std::sregex_iterator(strInput.begin(), strInput.end(), RE_EXPANDER);
+		auto end = std::sregex_iterator();
 
-                if (strncmp(match1.c_str(), "pkgmodname", 10) == 0)
-                {
-					return expand_pkgmodname(ctx);
-                }
-                else if (strncmp(match1.c_str(), "pkgparentmodname", 16) == 0)
-                {
-                    std::string pkgmodname = expand_pkgmodname(ctx);
-                    size_t pos = pkgmodname.rfind('.');
-                    return pos == std::string::npos ? pkgmodname : pkgmodname.substr(0, pos);
-                }
-                else if (strncmp(match1.c_str(), "ext", 3) == 0)
-                {
-                    static_assert(LOADER_DLL[0] == '*');
-                    return LOADER_DLL + 1;
-                }
-                else if (strncmp(match1.c_str(), "pkgbase", 7) == 0)
-                {
-                    return ctx.pkg_base.c_str();
-                }
-                else if (strncmp(match1.c_str(), "basename", 8) == 0)
-                {
-                    char *basename, *ext;
-                    qstring wrk_str;
-                    get_basename_and_ext(ctx.script_file.c_str(), &basename, &ext, wrk_str);
-                    return basename;
-                }
-                else if (strncmp(match1.c_str(), "env:", 4) == 0)
-                {
-                    qstring env;
-                    if (qgetenv(match1.begin() + 4, &env))
-                        return env.c_str();
-                }
-                return m.str(1);
-            }
-        ).c_str();
-    }
+		std::string result;
+		std::size_t last_pos = 0;
+
+		for (auto it = begin; it != end; ++it) {
+			std::smatch m = *it;
+			result += strInput.substr(last_pos, m.position() - last_pos);
+			qstring match1 = m.str(1).c_str();
+
+			if (strncmp(match1.c_str(), "pkgmodname", 10) == 0) {
+				result += expand_pkgmodname(ctx);
+			}
+			else if (strncmp(match1.c_str(), "pkgparentmodname", 16) == 0) {
+				std::string pkgmodname = expand_pkgmodname(ctx);
+				size_t pos = pkgmodname.rfind('.');
+				result += pos == std::string::npos ? pkgmodname : pkgmodname.substr(0, pos);
+			}
+			else if (strncmp(match1.c_str(), "ext", 3) == 0) {
+				static_assert(LOADER_DLL[0] == '*');
+				result += LOADER_DLL + 1;
+			}
+			else if (strncmp(match1.c_str(), "pkgbase", 7) == 0) {
+				result += ctx.pkg_base.c_str();
+			}
+			else if (strncmp(match1.c_str(), "basename", 8) == 0) {
+				char* basename;
+				char* ext;
+				qstring wrk_str;
+				get_basename_and_ext(ctx.script_file.c_str(), &basename, &ext, wrk_str);
+				result += basename;
+			}
+			else if (strncmp(match1.c_str(), "env:", 4) == 0) {
+				qstring env;
+				if (qgetenv(match1.begin() + 4, &env)) {
+					result += env.c_str();
+				}
+			}
+			else {
+				result += m.str(1);
+			}
+
+			last_pos = m.position() + m.length();
+		}
+
+		result += strInput.substr(last_pos);
+		output.clear();
+		output.insert(strInput.c_str());
+	}
 
     bool execute_reload_directive(
         script_info_t &dep_script_file,
